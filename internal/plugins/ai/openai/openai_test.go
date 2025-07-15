@@ -6,6 +6,7 @@ import (
 
 	"github.com/danielmiessler/fabric/internal/chat"
 	"github.com/danielmiessler/fabric/internal/domain"
+	"github.com/danielmiessler/fabric/internal/plugins"
 	openai "github.com/openai/openai-go"
 	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
@@ -174,4 +175,78 @@ func TestCitationFormatting(t *testing.T) {
 	// Verify deduplication - should only have 2 unique citations, not 3
 	citationCount := strings.Count(result, "- [")
 	assert.Equal(t, 2, citationCount, "Expected 2 unique citations")
+}
+
+func TestGitHubCopilotConfiguration(t *testing.T) {
+	tests := []struct {
+		name                string
+		apiBaseURL          string
+		expectCopilotHeader bool
+	}{
+		{
+			name:                "GitHub Copilot URL",
+			apiBaseURL:          "https://api.githubcopilot.com",
+			expectCopilotHeader: true,
+		},
+		{
+			name:                "GitHub Copilot URL with path",
+			apiBaseURL:          "https://api.githubcopilot.com/v1/chat/completions",
+			expectCopilotHeader: true,
+		},
+		{
+			name:                "Regular OpenAI URL",
+			apiBaseURL:          "https://api.openai.com/v1",
+			expectCopilotHeader: false,
+		},
+		{
+			name:                "Azure OpenAI URL",
+			apiBaseURL:          "https://myresource.openai.azure.com",
+			expectCopilotHeader: false,
+		},
+		{
+			name:                "Empty URL (default OpenAI)",
+			apiBaseURL:          "",
+			expectCopilotHeader: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a client with the test URL
+			client := NewClient()
+			client.ApiKey = &plugins.SetupQuestion{
+				Setting: &plugins.Setting{Value: "test-api-key"},
+			}
+			client.ApiBaseURL = &plugins.SetupQuestion{
+				Setting: &plugins.Setting{Value: tt.apiBaseURL},
+			}
+			err := client.configure()
+			assert.NoError(t, err, "Configure should not return an error")
+
+			// Check if the client was created successfully
+			assert.NotNil(t, client.ApiClient, "API client should be initialized")
+			actualDetection := isGitHubCopilotURL(tt.apiBaseURL)
+			assert.Equal(t, tt.expectCopilotHeader, actualDetection, 
+				"isGitHubCopilotURL should correctly detect GitHub Copilot URLs")
+		})
+	}
+}
+
+func TestOpenAIClientWithGitHubCopilotEnvironment(t *testing.T) {
+	client := NewClient()
+	
+	// Simulate environment variables being set
+	client.ApiKey = &plugins.SetupQuestion{
+		Setting: &plugins.Setting{Value: "ghs_test_github_oauth_token"},
+	}
+	client.ApiBaseURL = &plugins.SetupQuestion{
+		Setting: &plugins.Setting{Value: "https://api.githubcopilot.com"},
+	}
+	err := client.configure()
+	assert.NoError(t, err, "Configure should work with GitHub Copilot settings")
+	assert.NotNil(t, client.ApiClient, "API client should be initialized")
+	
+	// Verify that the client detects this as a GitHub Copilot endpoint
+	assert.True(t, isGitHubCopilotURL("https://api.githubcopilot.com"), 
+		"Should detect GitHub Copilot URL correctly")
 }

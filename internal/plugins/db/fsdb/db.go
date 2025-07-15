@@ -79,6 +79,10 @@ func (o *Db) Configure() (err error) {
 }
 
 func (o *Db) LoadEnvFile() (err error) {
+	if !o.IsEnvFileExists() {
+		return nil
+	}
+	
 	if err = godotenv.Load(o.EnvFilePath); err != nil {
 		err = fmt.Errorf("error loading .env file: %s", err)
 	}

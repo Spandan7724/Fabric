@@ -3,6 +3,7 @@ package openai
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 
@@ -71,6 +72,15 @@ func (o *Client) configure() (ret error) {
 	if o.ApiBaseURL.Value != "" {
 		opts = append(opts, option.WithBaseURL(o.ApiBaseURL.Value))
 	}
+	
+	// Check if this is a GitHub Copilot endpoint and add custom transport if needed
+	if o.ApiBaseURL.Value != "" && isGitHubCopilotURL(o.ApiBaseURL.Value) {
+		// Create HTTP client with GitHub Copilot transport
+		transport := NewCopilotTransport(nil)
+		httpClient := &http.Client{Transport: transport}
+		opts = append(opts, option.WithHTTPClient(httpClient))
+	}
+	
 	client := openai.NewClient(opts...)
 	o.ApiClient = &client
 	return
